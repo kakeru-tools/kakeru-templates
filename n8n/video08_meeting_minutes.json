@@ -1,0 +1,146 @@
+{
+  "id": "video08MeetingMinutes",
+  "name": "会議の録音 → AI議事録（要約・決定事項・宿題）→ スプレッドシート台帳（動画#8）",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "source": "kakeru-channel video_08",
+    "description": "Google Drive の監視フォルダに会議の録音ファイル（スマホ録音等）を入れると、Google Gemini(Analyze Audio) が音声を直接聞いて『3行要約・決定事項・宿題(担当付き)・次回持ち越し』をJSONで返し、スプレッドシートの議事録台帳に1行追記する。Whisper等の文字起こしツールは不要（Geminiが音声入力に対応）。使う認証は Google Drive/Sheets OAuth（動画#6と同じ）と Geminiキー（動画#4のもの）だけ＝新規認証ゼロ。Notion公式AI Meeting Notesとの違い=無料/全会議が1枚の台帳に集約され横断検索できる/項目を自社に合わせ自由に設計できる。注意=録音は参加者に一言伝える・社外秘はクラウドAI送信可否を社内確認・金額や納期など重要決定は必ず原音で確認（AIは下書き係）。動画のStep対応: Step1=新規WF / Step2=Driveトリガー+Download / Step3=Gemini音声解析 / Step4=Code分解 / Step5=台帳追記 / Step6=テスト→有効化 / Step7=Notion公式との違い / Step8=3つの注意。"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [ { "mode": "everyMinute" } ] },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_FOLDER_ID",
+          "mode": "id",
+          "cachedResultName": "議事録"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [ 0, 0 ],
+      "id": "node-drive-trigger-0001",
+      "name": "Google Driveトリガー（録音フォルダ）",
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "動画Step2。議事録用フォルダを作り folderToWatch にフォルダID（URLの /folders/●●● の●●●）を指定。会議の録音（m4a/mp3/wav等）をこのフォルダに入れると発火。トリガーはメタ情報のみ返すので、音声本体は次の Download File で取得（動画#6と同じコツ）。ポーリング式＝即時ではない。"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": { "binaryPropertyName": "data" }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [ 220, 0 ],
+      "id": "node-drive-download-0002",
+      "name": "音声をダウンロード（binary取得）",
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "トリガーが返したファイルID（{{ $json.id }}）で音声本体をダウンロードし、binary プロパティ名 data として取り込む。これを次の Gemini ノードに渡す。"
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "text": "あなたは日本の会社の議事録係です。添付された会議の録音を聞いて、次の4項目を、説明や前置きを一切付けず、厳密なJSONのみで返してください。summary は会議全体の要約（日本語3行以内）、decisions は決まったこと（箇条書きを改行区切りの1つの文字列に）、todos は宿題とその担当者（「内容（担当: 名前）」の形を改行区切りで）、carryover は次回に持ち越したこと（無ければ空文字）。聞き取れない箇所は推測せず「（聞き取り不明）」と書いてください。例: {\"summary\":\"…\",\"decisions\":\"…\",\"todos\":\"…\",\"carryover\":\"\"}",
+        "inputType": "binary",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [ 440, 0 ],
+      "id": "node-gemini-audio-0003",
+      "name": "Geminiで音声を解析（文字起こし＋整理）",
+      "credentials": {
+        "googlePalmApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google Gemini(PaLM) API" }
+      },
+      "notes": "動画Step3（心臓部）。ノードは『Google Gemini』アプリノード、Resource=Audio、Operation=Analyze Audio。Input Type=Binary / Input Data Field Name=data。Geminiは音声を直接聞けるため、Whisper等の文字起こしツールは不要。プロンプトの核=①4項目(要約/決定/宿題+担当/持ち越し)を強制 ②厳密JSONのみ ③聞き取れない箇所は推測させない。全文の文字起こしも欲しい場合はプロンプトに transcript 項目を足すか、Operation=Transcribe a Recording を別ノードで使う。長時間・大容量の録音でエラーになる場合は分割するか、Settings>Retry On Fail を有効化。#4（請求書）で作った Gemini 認証情報を再利用。"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Geminiの返答テキスト（JSON文字列）を取り出す（入る場所の候補を順に見る）\nlet raw = $json.content?.parts?.[0]?.text ?? $json.candidates?.[0]?.content?.parts?.[0]?.text ?? $json.text ?? $json.response ?? $json.output ?? '';\nif (typeof raw !== 'string') raw = JSON.stringify(raw);\nraw = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\nlet p = {};\ntry {\n  p = JSON.parse(raw);\n} catch (e) {\n  p = { summary: '', decisions: '', todos: '', carryover: '', _parse_error: String(e), _raw: raw };\n}\nconst fileName = $('Google Driveトリガー（録音フォルダ）').item.json.name || '';\nreturn [{ json: {\n  \"日付\": $now.toFormat('yyyy-MM-dd'),\n  \"ファイル名\": fileName,\n  \"要約\": p.summary || '',\n  \"決定事項\": p.decisions || '',\n  \"宿題\": p.todos || '',\n  \"持ち越し\": p.carryover || ''\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 660, 0 ],
+      "id": "node-code-parse-0004",
+      "name": "JSONを項目に分解",
+      "notes": "動画Step4。Geminiの出力を JSON.parse して 要約/決定事項/宿題/持ち越し に分解し、日付と元ファイル名を付ける。```json フェンス除去込み。パース失敗時は _raw と _parse_error が残るので原因が追える。"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "日付": "={{ $json[\"日付\"] }}",
+            "ファイル名": "={{ $json[\"ファイル名\"] }}",
+            "要約": "={{ $json[\"要約\"] }}",
+            "決定事項": "={{ $json[\"決定事項\"] }}",
+            "宿題": "={{ $json[\"宿題\"] }}",
+            "持ち越し": "={{ $json[\"持ち越し\"] }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [ 880, 0 ],
+      "id": "node-sheets-append-0005",
+      "name": "議事録台帳に追記",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "動画Step5。議事録台帳。REPLACE_WITH_YOUR_SHEET_ID をスプレッドシートIDに。1行目に『日付 / ファイル名 / 要約 / 決定事項 / 宿題 / 持ち越し』のヘッダを先に作る（マッピング名と厳密一致させる）。全会議が1枚の台帳にたまる＝Notion公式AIに対する差別化の核。"
+    }
+  ],
+  "connections": {
+    "Google Driveトリガー（録音フォルダ）": {
+      "main": [ [ { "node": "音声をダウンロード（binary取得）", "type": "main", "index": 0 } ] ]
+    },
+    "音声をダウンロード（binary取得）": {
+      "main": [ [ { "node": "Geminiで音声を解析（文字起こし＋整理）", "type": "main", "index": 0 } ] ]
+    },
+    "Geminiで音声を解析（文字起こし＋整理）": {
+      "main": [ [ { "node": "JSONを項目に分解", "type": "main", "index": 0 } ] ]
+    },
+    "JSONを項目に分解": {
+      "main": [ [ { "node": "議事録台帳に追記", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

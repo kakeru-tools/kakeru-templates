@@ -1,0 +1,114 @@
+{
+  "id": "video04InvoiceToSheets",
+  "name": "請求書・領収書PDF → AI読取 → スプレッドシート索引簿（動画#4）",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Gmailに届いた請求書/領収書PDFを Google Gemini(Analyze Document) で読み取り、取引日・取引先・金額を抽出して Google スプレッドシート（電帳法の検索用 索引簿）に1行追記する。Geminiの Chat Model サブノードは画像のみでPDF非対応のため、必ず『Google Gemini アプリノードの Analyze Document（Input Type=Binary）』を使う。"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [ { "mode": "everyMinute" } ] },
+        "simple": false,
+        "filters": { "q": "has:attachment filename:pdf" },
+        "options": { "downloadAttachments": true }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [ 0, 0 ],
+      "id": "node-gmail-trigger-0001",
+      "name": "Gmailトリガー（請求書メール）",
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "Simplify=OFF、Options>『Download Attachments』=ON。これでPDF添付が binary property名 attachment_0 として取り込まれる。q フィルタで has:attachment filename:pdf に絞ると安定（請求書用ラベルを使うなら filters>Label でラベル指定でも可）。トリガーはポーリング式＝即時でない。"
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "text": "あなたは日本の経理アシスタントです。添付された請求書または領収書を読み取り、次の項目だけを抽出して、説明や前置きを一切付けず、厳密なJSONのみで返してください。transaction_date は取引年月日を YYYY-MM-DD 形式で。vendor は取引先（発行者）の正式名称。amount は税込の合計金額を数字のみ（カンマ・円記号なし）で。doc_type は『請求書』または『領収書』。読み取れない項目は空文字または0にしてください。例: {\"transaction_date\":\"2026-06-01\",\"vendor\":\"株式会社サンプル商事\",\"amount\":110000,\"doc_type\":\"請求書\"}",
+        "inputType": "binary",
+        "binaryPropertyName": "attachment_0",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [ 260, 0 ],
+      "id": "node-gemini-analyze-0002",
+      "name": "Geminiでドキュメント解析（請求書/領収書）",
+      "credentials": {
+        "googlePalmApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google Gemini(PaLM) API" }
+      },
+      "notes": "★最重要: ノードは『Google Gemini』アプリノード、Resource=Document、Operation=Analyze Document。Chat Model サブノードは画像のみ＝PDFは無視されるので絶対に使わない。Input Type=Binary / Input Data Field Name=attachment_0。Model はUIのドロップダウンに出るものを選択（gemini-2.5-flash か新しい gemini-3.5-flash。gemini-2.0-flash は2026-06-01廃止なので選ばない）。503『model overloaded』が出たら Settings>Retry On Fail を有効化。スキャン画像PDFも Gemini のネイティブ vision で読める（n8n標準の Extract from PDF はテキスト層のみ＝スキャン非対応なので間に挟まない）。"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Geminiが返したテキスト（JSON文字列）を取り出す。ノード構成で入る場所が違うため複数候補を見る。\nlet raw = $json.text ?? $json.content ?? $json.response ?? $json.output ?? $json.data ?? '';\nif (typeof raw !== 'string') raw = JSON.stringify(raw);\n// ```json ... ``` のコードフェンスが付く場合があるので除去\nraw = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\nlet p = {};\ntry {\n  p = JSON.parse(raw);\n} catch (e) {\n  p = { transaction_date: '', vendor: '', amount: 0, doc_type: '', _parse_error: String(e), _raw: raw };\n}\nconst num = (v) => { const n = Number(String(v ?? '').replace(/[^0-9.\\-]/g, '')); return isNaN(n) ? 0 : n; };\nreturn [{ json: {\n  \"取引日\": p.transaction_date || '',\n  \"取引先\": p.vendor || '',\n  \"金額\": num(p.amount),\n  \"書類種別\": p.doc_type || ''\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 520, 0 ],
+      "id": "node-code-parse-0003",
+      "name": "JSONを項目に分解",
+      "notes": "Geminiの出力(JSON文字列)を JSON.parse して 取引日/取引先/金額/書類種別 に分解。```json フェンス除去と数値クレンジング込み。パース失敗時は _raw と _parse_error を残すので原因が追える。"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "取引日": "={{ $json[\"取引日\"] }}",
+            "取引先": "={{ $json[\"取引先\"] }}",
+            "金額": "={{ $json[\"金額\"] }}",
+            "書類種別": "={{ $json[\"書類種別\"] }}",
+            "受信日時": "={{ $('Gmailトリガー（請求書メール）').item.json.date }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [ 780, 0 ],
+      "id": "node-sheets-append-0004",
+      "name": "スプレッドシート索引簿に追記",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "電帳法の索引簿。REPLACE_WITH_YOUR_SHEET_ID をスプレッドシートID（URLの /d/●●●/edit の●●●）に。シート1行目に『取引日 / 取引先 / 金額 / 書類種別 / 受信日時』のヘッダを先に作る。Append は列名一致で追記するので、ヘッダ名と上のマッピング名を厳密一致させる（ズレると列がずれる/拒否される）。"
+    }
+  ],
+  "connections": {
+    "Gmailトリガー（請求書メール）": {
+      "main": [ [ { "node": "Geminiでドキュメント解析（請求書/領収書）", "type": "main", "index": 0 } ] ]
+    },
+    "Geminiでドキュメント解析（請求書/領収書）": {
+      "main": [ [ { "node": "JSONを項目に分解", "type": "main", "index": 0 } ] ]
+    },
+    "JSONを項目に分解": {
+      "main": [ [ { "node": "スプレッドシート索引簿に追記", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

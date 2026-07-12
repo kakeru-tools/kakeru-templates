@@ -1,0 +1,81 @@
+{
+  "id": "video01GmailToSheets",
+  "name": "問い合わせGmail → スプレッドシート自動記録（動画#1）",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [ { "mode": "everyMinute" } ] },
+        "simple": false,
+        "filters": { "labelIds": [] },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [ 0, 0 ],
+      "id": "node-gmail-trigger-0001",
+      "name": "Gmailトリガー（問い合わせラベル）",
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "Trigger On = ラベル を選び、問い合わせ用ラベルを指定。Simplify は必ずOFF（本文を取るため）。"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "f1", "name": "日時", "value": "={{ $json.date }}", "type": "string" },
+            { "id": "f2", "name": "差出人", "value": "={{ $json.From }}", "type": "string" },
+            { "id": "f3", "name": "件名", "value": "={{ $json.Subject }}", "type": "string" },
+            { "id": "f4", "name": "本文", "value": "={{ ($json.text || $json.snippet || '').slice(0, 200) }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [ 280, 0 ],
+      "id": "node-set-0002",
+      "name": "項目を整形（差出人・件名・本文）"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "REPLACE_WITH_YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "gid=0", "mode": "list", "cachedResultName": "シート1" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "日時": "={{ $json.日時 }}",
+            "差出人": "={{ $json.差出人 }}",
+            "件名": "={{ $json.件名 }}",
+            "本文": "={{ $json.本文 }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [ 560, 0 ],
+      "id": "node-sheets-0003",
+      "name": "スプレッドシートに追記",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google Sheets アカウント" }
+      },
+      "notes": "1行目に 日時/差出人/件名/本文 のヘッダを作っておく。Operation = Append row。"
+    }
+  ],
+  "connections": {
+    "Gmailトリガー（問い合わせラベル）": {
+      "main": [ [ { "node": "項目を整形（差出人・件名・本文）", "type": "main", "index": 0 } ] ]
+    },
+    "項目を整形（差出人・件名・本文）": {
+      "main": [ [ { "node": "スプレッドシートに追記", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false, "source": "kakeru-channel video_01" }
+}

@@ -1,0 +1,146 @@
+{
+  "id": "video06MeishiToContacts",
+  "name": "名刺を撮るだけ → AI読取 → スプレッドシート連絡先リスト（動画#6）",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Google Drive の監視フォルダに入れた名刺の画像を Google Gemini(Analyze Image) で読み取り、会社名・氏名・役職・電話・メール・住所を抽出して Google スプレッドシートの連絡先リストに1行追記する。Google Drive トリガーはファイルのメタ情報のみを返すため、直後に Google Drive の Download File を挟んで画像を binary(data) として取り込む。Gemini の Chat Model サブノードは扱いが異なるため、必ず『Google Gemini アプリノードの Analyze Image（Input Type=Binary）』を使う。プロンプトを日付・店名・金額に変えれば領収書→経費リストにも流用できる。名刺は個人情報のため取扱いに留意。"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [ { "mode": "everyMinute" } ] },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_FOLDER_ID",
+          "mode": "id",
+          "cachedResultName": "名刺"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [ 0, 0 ],
+      "id": "node-drive-trigger-0001",
+      "name": "Google Driveトリガー（名刺フォルダ）",
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "名刺用フォルダを一つ作り、folderToWatch にそのフォルダID（URLの /folders/●●● の●●●）を指定。スマホで撮った名刺をこのフォルダに入れると発火する。トリガーはファイルのメタ情報（id/name等）だけを返すので、画像本体は次の Download File で取得する。ポーリング式＝即時ではない。"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": { "binaryPropertyName": "data" }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [ 220, 0 ],
+      "id": "node-drive-download-0002",
+      "name": "画像をダウンロード（binary取得）",
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "トリガーが返したファイルID（{{ $json.id }}）を使って画像本体をダウンロードし、binary プロパティ名 data として取り込む。これを次の Gemini ノードの Input に渡す。"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "text": "あなたは日本のビジネスアシスタントです。添付された名刺の画像を読み取り、次の項目だけを抽出して、説明や前置きを一切付けず、厳密なJSONのみで返してください。company は会社名、name は氏名、title は役職や部署、phone は固定電話、mobile は携帯番号、email はメールアドレス、address は住所。読み取れない項目は空文字にしてください。例: {\"company\":\"株式会社サンプル\",\"name\":\"山田太郎\",\"title\":\"営業部 課長\",\"phone\":\"06-1234-5678\",\"mobile\":\"090-1234-5678\",\"email\":\"yamada@example.co.jp\",\"address\":\"大阪府大阪市...\"}",
+        "inputType": "binary",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [ 440, 0 ],
+      "id": "node-gemini-image-0003",
+      "name": "Geminiで名刺画像を解析",
+      "credentials": {
+        "googlePalmApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google Gemini(PaLM) API" }
+      },
+      "notes": "★最重要: ノードは『Google Gemini』アプリノード、Resource=Image、Operation=Analyze Image。Chat Model サブノードではなくアプリノードを使う。Input Type=Binary / Input Data Field Name=data（前の Download File の binary名）。Model はUIのドロップダウンに出るものを選択（gemini-2.5-flash か新しいもの。gemini-2.0-flash は廃止なので選ばない）。503『overloaded』が出たら Settings>Retry On Fail を有効化。#4（請求書PDF）で作った Gemini 認証情報をそのまま再利用できる。"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Geminiが返したテキスト（JSON文字列）を取り出す。ノード構成で入る場所が違うため複数候補を見る。\nlet raw = $json.text ?? $json.content ?? $json.response ?? $json.output ?? $json.data ?? '';\nif (typeof raw !== 'string') raw = JSON.stringify(raw);\n// ```json ... ``` のコードフェンスが付く場合があるので除去\nraw = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\nlet p = {};\ntry {\n  p = JSON.parse(raw);\n} catch (e) {\n  p = { _parse_error: String(e), _raw: raw };\n}\nreturn [{ json: {\n  \"会社名\": p.company || '',\n  \"氏名\": p.name || '',\n  \"役職\": p.title || '',\n  \"電話\": p.phone || '',\n  \"携帯\": p.mobile || '',\n  \"メール\": p.email || '',\n  \"住所\": p.address || ''\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 660, 0 ],
+      "id": "node-code-parse-0004",
+      "name": "JSONを項目に分解",
+      "notes": "Geminiの出力(JSON文字列)を JSON.parse して 会社名/氏名/役職/電話/携帯/メール/住所 に分解。```json フェンス除去込み。パース失敗時は _raw と _parse_error を残すので原因が追える。"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "シート1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "会社名": "={{ $json[\"会社名\"] }}",
+            "氏名": "={{ $json[\"氏名\"] }}",
+            "役職": "={{ $json[\"役職\"] }}",
+            "電話": "={{ $json[\"電話\"] }}",
+            "携帯": "={{ $json[\"携帯\"] }}",
+            "メール": "={{ $json[\"メール\"] }}",
+            "住所": "={{ $json[\"住所\"] }}",
+            "登録日": "={{ $now.toFormat('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [ 880, 0 ],
+      "id": "node-sheets-append-0005",
+      "name": "連絡先リストに追記",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "連絡先リスト。REPLACE_WITH_YOUR_SHEET_ID をスプレッドシートID（URLの /d/●●●/edit の●●●）に。シート1行目に『会社名 / 氏名 / 役職 / 電話 / 携帯 / メール / 住所 / 登録日』のヘッダを先に作る。Append は列名一致で追記するので、ヘッダ名と上のマッピング名を厳密一致させる（ズレると列がずれる/拒否される）。"
+    }
+  ],
+  "connections": {
+    "Google Driveトリガー（名刺フォルダ）": {
+      "main": [ [ { "node": "画像をダウンロード（binary取得）", "type": "main", "index": 0 } ] ]
+    },
+    "画像をダウンロード（binary取得）": {
+      "main": [ [ { "node": "Geminiで名刺画像を解析", "type": "main", "index": 0 } ] ]
+    },
+    "Geminiで名刺画像を解析": {
+      "main": [ [ { "node": "JSONを項目に分解", "type": "main", "index": 0 } ] ]
+    },
+    "JSONを項目に分解": {
+      "main": [ [ { "node": "連絡先リストに追記", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

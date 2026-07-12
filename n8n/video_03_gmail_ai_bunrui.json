@@ -1,0 +1,124 @@
+{
+  "id": "video03GmailAiBunrui",
+  "name": "問い合わせGmail → AI自動分類＆ラベル付け＆一次返信ドラフト（動画#3）",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "source": "kakeru-channel video_03",
+    "description": "Gmailに届いた問い合わせを Google Gemini が読んで『見積依頼/技術的な質問/請求・支払い/営業・その他』の4分類に判定し、Gmailに分類どおりのラベルを貼り、一次返信の下書きを元メールのスレッドに保存する。自動送信は絶対にしない（送信ボタンは人間が押す設計）。判断に迷うメールとAI出力のパース失敗は、必ず『営業・その他』へ倒すフォールバック設計。動画のStep対応: Step1=n8n Cloudで新規WF / Step2=Gmailトリガー / Step3=Gmail側で4ラベル作成(事前準備) / Step4=Gemini APIキー(Google AI Studio・無料) / Step5=Geminiノード / Step6=Codeノード / Step7=ラベル追加＋下書き保存 / Step8=テスト→アクティブ化。"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [ { "mode": "everyMinute" } ] },
+        "simple": false,
+        "filters": { "labelIds": [] },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [ 0, 0 ],
+      "id": "node-gmail-trigger-0001",
+      "name": "Gmailトリガー（問い合わせ受信）",
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "動画Step2。受信トレイ全体、または問い合わせ用ラベルを filters>Label で指定。Simplify は必ずOFF（本文を取るため。ONだとAIが中身を読めない）。n8n Cloud なら Gmail 連携は画面内のワンクリック承認で終わる（動画Step1の理由）。トリガーはポーリング式＝即時ではない。"
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=あなたは日本の中小企業の問い合わせメール対応アシスタントです。次のメールを読んで、(1)分類 と (2)一次返信の下書き を作ってください。\n\n分類は必ず次の4つのどれか1つ: 見積依頼 / 技術的な質問 / 請求・支払い / 営業・その他。判断に迷ったら、必ず「営業・その他」に分類してください。\n\n返信下書きは、相手への宛名、お問い合わせへのお礼、内容を確認して担当から折り返す旨、を入れた丁寧な日本語のビジネスメール本文にしてください。これは人間が確認・修正してから送る一次返信の下書きです。金額の提示や納期の確約はしないでください。\n\n説明や前置きを一切付けず、厳密なJSONのみで返してください。例: {\"category\":\"見積依頼\",\"reply_draft\":\"株式会社サンプル 御中\\n\\nお問い合わせいただきありがとうございます。…\"}\n\n--- 対象メール ---\n件名: {{ $json.Subject }}\n差出人: {{ $json.From }}\n本文:\n{{ $json.text || $json.snippet || '' }}\n--- ここまで ---"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [ 260, 0 ],
+      "id": "node-gemini-classify-0002",
+      "name": "Geminiで分類＋返信ドラフト生成",
+      "credentials": {
+        "googlePalmApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google Gemini(PaLM) API" }
+      },
+      "notes": "動画Step4-5（心臓部）。ノードは『Google Gemini』アプリノード、Resource=Text、Operation=Message a Model。APIキーは Google AI Studio で発行（無料・クレジットカード不要・以降の動画でも使い回せる）。Model はUIのドロップダウンに出るものを選択（gemini-2.5-flash か、より新しいもの。gemini-2.0-flash は廃止済なので選ばない）。プロンプトの核=①4分類のどれかを強制 ②迷ったら『営業・その他』へ倒す（誤分類対策） ③厳密JSONのみで返させる。503『model overloaded』が出たら Settings>Retry On Fail を有効化。"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Geminiの返答テキストを取り出す（ノード構成で入る場所が違うため複数候補を見る）\nlet raw = $json.content?.parts?.[0]?.text ?? $json.candidates?.[0]?.content?.parts?.[0]?.text ?? $json.text ?? $json.response ?? $json.output ?? '';\nif (typeof raw !== 'string') raw = JSON.stringify(raw);\n// ```json ... ``` のコードフェンスが付く場合があるので除去してから変換（動画Step6のコツ）\nraw = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\nlet p = {};\ntry {\n  p = JSON.parse(raw);\n} catch (e) {\n  p = { category: '', reply_draft: '', _parse_error: String(e), _raw: raw };\n}\n// 分類名 → GmailラベルID の対応表。★動画Step3でGmailに作った4ラベルのIDに置換する。\n// ラベルIDは Gmail API の labels 一覧や、n8nのGmailノードでラベルを選ぶ画面で確認できる（Label_xxxxxxxxxx 形式。システムラベル以外は名前でなくIDが必要）。\nconst LABELS = {\n  '見積依頼': 'REPLACE_WITH_LABEL_ID_MITSUMORI',\n  '技術的な質問': 'REPLACE_WITH_LABEL_ID_GIJUTSU',\n  '請求・支払い': 'REPLACE_WITH_LABEL_ID_SEIKYU',\n  '営業・その他': 'REPLACE_WITH_LABEL_ID_SONOTA'\n};\n// AIが4分類以外を返した／パースに失敗した場合も『営業・その他』へ倒す（人間が見る箱に集めるフォールバック）\nconst category = Object.prototype.hasOwnProperty.call(LABELS, p.category) ? p.category : '営業・その他';\nreturn [{ json: {\n  \"分類\": category,\n  \"ラベルID\": LABELS[category],\n  \"返信下書き\": p.reply_draft || ''\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 520, 0 ],
+      "id": "node-code-parse-0003",
+      "name": "JSONを項目に分解",
+      "notes": "動画Step6。Geminiの出力(JSON文字列)を JSON.parse して 分類/ラベルID/返信下書き に分解。```json フェンス除去込み。パース失敗時は _raw と _parse_error を残すので原因が追える（その場合も分類は『営業・その他』に倒れて止まらない）。★LABELS の4つの REPLACE_WITH_LABEL_ID_… を自分のGmailラベルIDに置換すること。"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $('Gmailトリガー（問い合わせ受信）').item.json.id }}",
+        "labelIds": "={{ [ $json[\"ラベルID\"] ] }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [ 780, 0 ],
+      "id": "node-gmail-label-0004",
+      "name": "分類ラベルを付ける",
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "動画Step7の1つ目（Step3で作った4ラベルがGmail側に先にあること）。Message>Add Label(s)。対象は元の受信メール（トリガーのメッセージID）、貼るラベルはAIの分類結果に対応するID（前のコードノードが決めたもの）。これで受信トレイを開いた時には仕分けが終わっている。"
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "={{ 'Re: ' + ($('Gmailトリガー（問い合わせ受信）').item.json.Subject || '') }}",
+        "emailType": "text",
+        "message": "={{ $('JSONを項目に分解').item.json[\"返信下書き\"] }}",
+        "options": {
+          "sendTo": "={{ $('Gmailトリガー（問い合わせ受信）').item.json.From }}",
+          "threadId": "={{ $('Gmailトリガー（問い合わせ受信）').item.json.threadId }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [ 1040, 0 ],
+      "id": "node-gmail-draft-0005",
+      "name": "一次返信を下書き保存（送信しない）",
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google アカウント" }
+      },
+      "notes": "動画Step7の2つ目。Draft>Create。AIの一次返信を『下書き』として保存するだけで、自動送信は絶対にしない（最後の判断は必ず人間に残す＝この動画の設計思想）。Options>Thread ID に元メールのスレッドIDを入れると、そのメールへの返信下書きとしてスレッドにぶら下がる。To は差出人アドレス。送る前に必ず下書きを開いて、目で確認して、直してから送る。"
+    }
+  ],
+  "connections": {
+    "Gmailトリガー（問い合わせ受信）": {
+      "main": [ [ { "node": "Geminiで分類＋返信ドラフト生成", "type": "main", "index": 0 } ] ]
+    },
+    "Geminiで分類＋返信ドラフト生成": {
+      "main": [ [ { "node": "JSONを項目に分解", "type": "main", "index": 0 } ] ]
+    },
+    "JSONを項目に分解": {
+      "main": [ [ { "node": "分類ラベルを付ける", "type": "main", "index": 0 } ] ]
+    },
+    "分類ラベルを付ける": {
+      "main": [ [ { "node": "一次返信を下書き保存（送信しない）", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

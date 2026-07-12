@@ -1,0 +1,151 @@
+{
+  "id": "video07NewsAiSummarySlack",
+  "name": "毎朝7時 ニュースRSS → AIが3行要約 → Slack自動投稿（動画#7）",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "source": "kakeru-channel video_07",
+    "description": "毎朝7時に Schedule Trigger が起動し、ニュースサイトのRSSから最新記事を取得、最新5件に絞ってタイトル＋リンクを1つのテキストにまとめ、Google Gemini が『今日おさえるべきポイント』を日本語3行（各行に元記事リンク付き）で要約し、Slackのチャンネルに自動投稿する。RSSは認証不要。使う認証は Geminiキー（動画#4のものを再利用可）と Slackボットトークン（動画#2のものを再利用可）の2つだけ。要約の各行に元記事リンクを付けさせるのは『AIの要約を鵜呑みにせず原文に飛べるようにする』ための設計。動画のStep対応: Step1=新規WF / Step2=Scheduleトリガー / Step3=RSS Read / Step4=Limit+Code / Step5=Gemini 3行要約 / Step6=Slack投稿 / Step7=テスト→アクティブ化 / Step8=応用(フィード差替)と注意(原文確認)。"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 7,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [ 0, 0 ],
+      "id": "node-schedule-trigger-0001",
+      "name": "毎朝7時に起動",
+      "notes": "動画Step2。Trigger Interval=Days / Trigger at Hour=7am。時刻はワークフロー設定のタイムゾーン（Settings>Timezone。日本ならAsia/Tokyo）で解釈されるので、ズレる時はまずここを確認。テストは朝7時を待たず『Test workflow』ボタンで即時実行できる（動画Step7）。"
+    },
+    {
+      "parameters": {
+        "url": "https://www.nhk.or.jp/rss/news/cat0.xml",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.1,
+      "position": [ 220, 0 ],
+      "id": "node-rss-read-0002",
+      "name": "ニュースRSSを取得",
+      "notes": "動画Step3。RSS Read ノード＝認証不要・URLを1つ貼るだけ。既定はNHKニュース主要トピックのRSS。業界紙・好きなブログ・海外ニュースなどのRSS URLに差し替えれば同じ仕組みがそのまま使える（動画Step8）。複数フィードを読みたい時はこのノードを並べて Merge でまとめる。"
+    },
+    {
+      "parameters": {
+        "maxItems": 5
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [ 440, 0 ],
+      "id": "node-limit-0003",
+      "name": "最新5件に絞る",
+      "notes": "動画Step4の前半。RSSは記事をたくさん返すので、要約が長くなりすぎないよう最新5件だけに絞る。件数は好みで変更可（多いほどGeminiに渡す文字数が増える）。"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 5件の記事（タイトル＋リンク）を、AIに渡す1つのテキストにまとめる（動画Step4の後半＝下ごしらえ）\nconst items = $input.all();\nconst articles = items.map((it, i) => {\n  const t = it.json.title || '';\n  const l = it.json.link || '';\n  return `${i + 1}. ${t}\\n${l}`;\n}).join('\\n');\nreturn [{ json: { articles, count: items.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 660, 0 ],
+      "id": "node-code-combine-0004",
+      "name": "記事一覧を1つのテキストに",
+      "notes": "動画Step4の後半。RSSの各記事（title/link）を『1. タイトル＋URL』の形で連結して articles に入れる。RSSフィードによっては項目名が違うことがある（contentSnippet等）ので、動かない時は前のノードの出力を見て title/link の名前を合わせる。"
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=あなたは忙しい経営者のためのニュース秘書です。次の記事一覧から、今日おさえるべきポイントを日本語3行で要約してください。\n\nルール:\n- 全体で3行。1行=1トピック。各行は50字以内の平易な日本語。\n- 各行の最後に、その元記事のリンクをそのまま付ける（リンクの改変・短縮をしない）。\n- 記事一覧に無い情報を足さない。誇張しない。重要度の高い順に並べる。\n- 前置きや説明は一切付けず、3行の要約だけを返す。\n\n--- 今日の記事一覧 ---\n{{ $json.articles }}\n--- ここまで ---"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [ 880, 0 ],
+      "id": "node-gemini-summary-0005",
+      "name": "Geminiで3行要約",
+      "credentials": {
+        "googlePalmApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Google Gemini(PaLM) API" }
+      },
+      "notes": "動画Step5（心臓部）。ノードは『Google Gemini』アプリノード、Resource=Text、Operation=Message a Model。APIキーは動画#4（請求書PDF）で作ったものを再利用（新規なら Google AI Studio で無料発行・カード不要）。プロンプトの核=①3行・1行1トピックに強制 ②各行に元記事リンクを付けさせる（AI要約を鵜呑みにせず原文に飛べる設計＝動画Step8の注意とセット） ③一覧に無い情報を足させない。Model はUIのドロップダウンから gemini-2.5-flash か、より新しいものを選択。503『model overloaded』が出たら Settings>Retry On Fail を有効化。"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Geminiの返答テキストを取り出す（ノード構成で入る場所が違うため複数候補を見る）\nlet raw = $json.content?.parts?.[0]?.text ?? $json.candidates?.[0]?.content?.parts?.[0]?.text ?? $json.text ?? $json.response ?? $json.output ?? '';\nif (typeof raw !== 'string') raw = JSON.stringify(raw);\nraw = raw.replace(/```/g, '').trim();\nconst today = new Date();\nconst dateStr = `${today.getFullYear()}/${today.getMonth() + 1}/${today.getDate()}`;\nconst summary = `:newspaper: *今朝のニュース3行要約（${dateStr}）*\\n${raw}`;\nreturn [{ json: { summary } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [ 1100, 0 ],
+      "id": "node-code-format-0006",
+      "name": "投稿メッセージを組み立て",
+      "notes": "Geminiの出力を取り出し、日付入りの見出しを付けてSlack投稿用の summary に整える。見出しの絵文字や文言は好みで変更可。"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_CHANNEL_ID",
+          "mode": "id",
+          "cachedResultName": "#ニュース"
+        },
+        "text": "={{ $json.summary }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [ 1320, 0 ],
+      "id": "node-slack-post-0007",
+      "name": "Slackに投稿",
+      "credentials": {
+        "slackApi": { "id": "REPLACE_WITH_YOUR_CREDENTIAL", "name": "Slack Bot" }
+      },
+      "notes": "動画Step6。Message>Send。ボットは動画#2（Gmail→Slack通知）で作ったものを再利用（新規なら api.slack.com/apps でアプリ作成→Bot Token Scopes に chat:write→ワークスペースにInstall→xoxb-トークンをn8nのSlack API認証に登録）。★最重要: 投稿先チャンネルにボットを招待しておくこと（チャンネルで『/invite @ボット名』）。not_in_channel エラーはこれが原因＝一番つまずくポイント。"
+    }
+  ],
+  "connections": {
+    "毎朝7時に起動": {
+      "main": [ [ { "node": "ニュースRSSを取得", "type": "main", "index": 0 } ] ]
+    },
+    "ニュースRSSを取得": {
+      "main": [ [ { "node": "最新5件に絞る", "type": "main", "index": 0 } ] ]
+    },
+    "最新5件に絞る": {
+      "main": [ [ { "node": "記事一覧を1つのテキストに", "type": "main", "index": 0 } ] ]
+    },
+    "記事一覧を1つのテキストに": {
+      "main": [ [ { "node": "Geminiで3行要約", "type": "main", "index": 0 } ] ]
+    },
+    "Geminiで3行要約": {
+      "main": [ [ { "node": "投稿メッセージを組み立て", "type": "main", "index": 0 } ] ]
+    },
+    "投稿メッセージを組み立て": {
+      "main": [ [ { "node": "Slackに投稿", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
