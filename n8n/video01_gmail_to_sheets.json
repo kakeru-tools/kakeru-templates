@@ -35,7 +35,8 @@
       "typeVersion": 3.4,
       "position": [ 280, 0 ],
       "id": "node-set-0002",
-      "name": "項目を整形（差出人・件名・本文）"
+      "name": "項目を整形（差出人・件名・本文）",
+      "notes": "差出人・件名・本文が空になる時は、Gmailトリガーの Simplify OFF を確認（From / Subject / text は Simplify OFF でないと入らない。頭文字は大文字）。ここで付けた名前（日時/差出人/件名/本文）は次のシート列名と完全一致させる（全角/半角・余分なスペースに注意）。"
     },
     {
       "parameters": {
