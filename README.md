@@ -14,6 +14,12 @@ YouTubeチャンネル「**カケル｜ノーコードAI自動化**」で解説�
 | 7 | [video07_news_ai_summary_slack.json](n8n/video07_news_ai_summary_slack.json) | 毎朝7時にニュースをAIが3行要約→Slackに自動投稿 | (公開後にリンク) |
 | 8 | [video08_meeting_minutes.json](n8n/video08_meeting_minutes.json) | 会議の録音→AIが議事録（要約・決定事項・宿題）→台帳に自動記録 | (公開後にリンク) |
 
+## その他の資料
+
+| フォルダ | 内容 |
+|---|---|
+| [tokutei2-tekkin/](tokutei2-tekkin/) | 特定技能2号（建設分野・鉄筋）受験対策キット（株式会社山村組の社内向け資料）：学習アプリ（要点まとめ・学科/実技の模擬テスト・用語集）と印刷用の問題冊子 |
+
 ## 使い方（インポート手順）
 
 1. 使いたいテンプレートのJSONファイルをダウンロード
