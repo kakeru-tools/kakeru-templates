@@ -143,6 +143,7 @@ h3{font-size:1.05rem}
 
 .search{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-height:44px}
 .foot{margin-top:24px;font-size:.8rem;color:var(--ink-2)}
+#credit{max-width:880px;margin:0 auto;padding:0 var(--gutter) 24px}
 
 /* SVG figures */
 .f-conc{fill:var(--conc)} .f-bar{fill:var(--bar)}
@@ -179,6 +180,7 @@ h3{font-size:1.05rem}
   <nav class="tabs" id="tabs" role="tablist" aria-label="メニュー"></nav>
 </header>
 <main id="main"><p>読み込み中…</p></main>
+<footer class="foot" id="credit">作成：株式会社山村組</footer>
 <noscript><p style="padding:16px">このページを使うには JavaScript を有効にしてください。</p></noscript>
 <script>
 window.QDATA = {
@@ -366,6 +368,7 @@ function $(sel) { return document.querySelector(sel); }
 function renderHeader() {
   var br = $('#brand'); if (br) br.innerHTML = fx('{特定|とくてい}{技能|ぎのう}2{号|ごう} {鉄筋|てっきん}{対策|たいさく}');
   var bs = $('#brand-sub'); if (bs) bs.innerHTML = fx('{建設|けんせつ}{分野|ぶんや}・{建築|けんちく}{区分|くぶん}');
+  var cr = $('#credit'); if (cr) cr.innerHTML = fx('{作成|さくせい}：{株式会社|かぶしきがいしゃ}{山村組|やまむらぐみ}');
   var seg = $('#furi');
   seg.innerHTML = '<span>ふりがな</span>' + [['ruby', '{上|うえ}'], ['paren', '（ ）'], ['none', 'なし']].map(function (m) {
     return '<button type="button" data-furi="' + m[0] + '" aria-pressed="' + (state.furi === m[0]) + '">' + fx(m[1]) + '</button>';
@@ -383,6 +386,7 @@ function setTab(id, keepScroll) {
 }
 
 function render() {
+  if (expireIfOver(state.quiz && state.quiz[state.tab])) return;
   renderHeader();
   var main = $('#main');
   if (state.tab === 'home') main.innerHTML = viewHome();
@@ -502,6 +506,8 @@ function newQuiz(key, mode, shuffle, onlyIds) {
   };
 }
 function remaining(z) { return z.mode === 'exam' ? EXAM[z.key].minutes * 60 - (Date.now() - z.startedAt) / 1000 : null; }
+// The ticker stops on other tabs and restarts on every render, so check the limit on each interaction too.
+function expireIfOver(z) { if (!z || z.done || z.mode !== 'exam' || remaining(z) > 0) return false; finish(z, true); return true; }
 function answeredCount(z) { return z.items.filter(function (it) { return it.pick !== null; }).length; }
 
 function startTicker() { stopTicker(); ticker = setInterval(tick, 1000); }
@@ -652,9 +658,15 @@ document.addEventListener('click', function (e) {
     var sh = document.getElementById('shuf-' + d.start);
     state.quiz[d.start] = newQuiz(d.start, m ? m.value : 'exam', sh ? sh.checked : false, null); render(); window.scrollTo(0, 0); return;
   }
-  if (d.retry) { var w = store.get('wrong:' + d.retry, []); if (!w.length) return; state.quiz[d.retry] = newQuiz(d.retry, 'practice', true, w); setTab(d.retry); return; }
+  if (d.retry) {
+    // On a result screen, take the wrong answers from memory so retry works even when storage is unavailable.
+    var zr = state.quiz[d.retry];
+    var w = zr && zr.done ? zr.items.filter(function (it) { return it.pick !== byId(zr.key, it.id).a; }).map(function (it) { return it.id; }) : store.get('wrong:' + d.retry, []);
+    if (!w.length) return; state.quiz[d.retry] = newQuiz(d.retry, 'practice', true, w); setTab(d.retry); return;
+  }
   if (d.restart) { state.quiz[d.restart] = null; render(); window.scrollTo(0, 0); return; }
   if (!z) return;
+  if (expireIfOver(z)) { window.scrollTo(0, 0); return; }
   if (d.pick !== undefined) { pick(z, Number(d.pick)); return; }
   if (d.nav) { go(z, z.idx + Number(d.nav)); return; }
   if (d.goto !== undefined) { go(z, Number(d.goto)); return; }
@@ -674,6 +686,7 @@ document.addEventListener('input', function (e) {
 document.addEventListener('keydown', function (e) {
   var z = state.quiz[state.tab];
   if (!z || z.done || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (expireIfOver(z)) return;
   var k = NUMS.indexOf(e.key);
   if (k >= 0) { pick(z, z.items[z.idx].order[k]); e.preventDefault(); }
   else if (e.key === 'ArrowRight') { go(z, z.idx + 1); e.preventDefault(); }
