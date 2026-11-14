@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="仮のカットリスト">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1B2229" media="(prefers-color-scheme: dark)">
+<style>:root{color-scheme:light;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>仮のカットリスト</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<style>
+/* 並べ方: 上に合計の帯(固定)、中に「材質・径」の選択と長さの行、下に「画像にする」(固定)。親指だけで入れられる縦一列。 */
+:root{
+  --bg:#EEF1F4; --panel:#FFFFFF; --ink:#17212B; --muted:#586573; --line:#D2D9E0; --chip:#E2E8EE;
+  --accent:#0B5CAD; --accent-ink:#FFFFFF; --ok:#1B7F3B; --over:#C0262D; --warn:#8A5200;
+  --font-ui:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic",Meiryo,sans-serif;
+  --font-num:"Barlow Semi Condensed","Hiragino Sans","Yu Gothic UI","Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12171C; --panel:#1B2229; --ink:#E8EDF2; --muted:#9AA7B4; --line:#2F3A45; --chip:#27313B;
+    --accent:#5AA2F0; --accent-ink:#0B1117; --ok:#5BD27A; --over:#FF8078; --warn:#FFB454; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12171C; --panel:#1B2229; --ink:#E8EDF2; --muted:#9AA7B4; --line:#2F3A45; --chip:#27313B;
+  --accent:#5AA2F0; --accent-ink:#0B1117; --ok:#5BD27A; --over:#FF8078; --warn:#FFB454; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:16px;line-height:1.5;-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+html{touch-action:manipulation}
+button,select{font:inherit;color:inherit;touch-action:manipulation;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap,.top-in,.act-in{max-width:560px;margin:0 auto}
+
+/* 上の帯 */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+.top-in{padding-block:10px;display:grid;gap:6px}
+.top-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ttl{margin:0;font-size:14px;font-weight:600;color:var(--muted);letter-spacing:.04em}
+.chip{border:1px solid var(--line);background:var(--chip);border-radius:4px;padding:6px 10px;font-size:14px;min-height:36px}
+.chip b{font-size:17px;font-weight:700}
+.target-edit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.target-edit input{width:88px;height:44px;font-size:20px;text-align:right;padding:0 8px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);font-family:var(--font-num)}
+.sum-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sum{display:flex;align-items:baseline;gap:6px;min-width:0}
+.sum .lbl{font-size:13px;color:var(--muted)}
+.big{font-size:38px;font-weight:700;line-height:1}
+.unit{font-size:15px;color:var(--muted)}
+.rest{font-size:16px;font-weight:600}
+.rest.ok{color:var(--ok)}
+.rest.over{color:var(--over)}
+.bar{height:6px;background:var(--chip);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;width:0;background:var(--accent)}
+.bar-fill.ok{background:var(--ok)}
+.bar-fill.over{background:var(--over)}
+
+/* 入力 */
+#entry .wrap{padding-block:14px 120px;display:grid;gap:14px}
+.lead{margin:0;font-size:15px;color:var(--muted)}
+.pick{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:10px}
+.pick label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.pick select{width:100%;height:54px;font-size:20px;font-weight:600;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+.have{display:grid;gap:6px}
+.have-lbl{font-size:13px;color:var(--muted)}
+.have-list{display:flex;flex-wrap:wrap;gap:8px}
+.have-list button{border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:6px 10px;font-size:15px;min-height:40px;text-align:left}
+.have-list button[aria-current="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.have-list b{font-weight:700}
+.tools{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+.tools-lbl{font-size:13px;color:var(--muted)}
+.mini{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--panel)}
+.mini button{border:0;background:transparent;padding:6px 16px;font-size:15px;min-height:44px}
+.mini button + button{border-left:1px solid var(--line)}
+.mini button[aria-pressed="true"]{background:var(--chip);font-weight:700}
+.rows-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:14px;color:var(--muted)}
+.rows-head b{font-size:19px;color:var(--ink)}
+.rows{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.row{display:grid;grid-template-columns:56px 44px minmax(0,1fr) 44px 74px;gap:8px;align-items:center;padding:8px 10px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.len{display:grid;line-height:1.15}
+.len .m{font-size:21px;font-weight:600}
+.len .w{font-size:11px;color:var(--muted);white-space:nowrap}
+.row.on .len .m{color:var(--accent)}
+.pm{width:44px;height:44px;border:1px solid var(--line);border-radius:4px;background:var(--bg);font-size:24px;line-height:1;padding:0}
+.qty{width:100%;height:44px;font-size:21px;text-align:right;padding:0 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink)}
+.kg{text-align:right;font-size:17px;color:var(--muted);white-space:nowrap}
+.row.on .kg{color:var(--ink);font-weight:600}
+.link{border:0;background:transparent;color:var(--accent);font-size:15px;padding:10px 4px;justify-self:start;text-decoration:underline;text-underline-offset:3px}
+.link.danger{color:var(--over)}
+.who{display:grid;gap:6px}
+.who label{font-size:14px;color:var(--muted)}
+.who input,.who textarea{width:100%;font:inherit;font-size:17px;padding:10px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink)}
+.who input{height:46px;margin-bottom:6px}
+.ask{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:15px;padding:6px 0}
+.btn-sub{border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:8px 16px;font-size:15px;min-height:42px}
+.btn-sub.danger{border-color:var(--over);color:var(--over)}
+a.btn-sub{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ink)}
+
+/* 下の帯 */
+.act{position:fixed;left:0;right:0;bottom:0;z-index:8;background:var(--panel);border-top:1px solid var(--line);padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+.btn-main{width:100%;min-height:54px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-ink);font-size:19px;font-weight:700;letter-spacing:.04em}
+.btn-main:disabled{opacity:.45}
+
+/* できた画像 */
+#result .wrap{padding-block:14px 40px;display:grid;gap:14px}
+.res-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.res-head h2{margin:0;font-size:20px}
+.imgbox{background:#FFFFFF;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.imgbox img{display:block;width:100%;height:auto;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}
+.msg{margin:0;min-height:1.5em;font-size:15px;color:var(--muted)}
+.hint{margin:0;font-size:14px;color:var(--warn)}
+.target-edit .err{flex-basis:100%;color:var(--over)}
+/* 幅の狭い画面(初代 SE・拡大表示の iPhone＝幅320)では、本数の欄がつぶれて数字が見えなくなる。重量を行の下の段へ回して欄の幅を確保する */
+@media (max-width:374px){
+  .row{grid-template-columns:56px 44px minmax(0,1fr) 44px;row-gap:0}
+  .kg{grid-column:1 / -1;line-height:1.2}
+  .rows-head{display:grid;gap:0}
+  .sum-row{display:grid;gap:2px}
+  .rest{min-height:1.5em}
+  .pick{grid-template-columns:minmax(0,1fr)}
+}
+@media (prefers-reduced-motion: no-preference){ .bar-fill{transition:width .2s ease} }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="gut"><div class="top-in">
+    <div class="top-row">
+      <h1 class="ttl">仮のカットリスト</h1>
+      <button type="button" class="chip" id="targetBtn" aria-expanded="false" aria-controls="targetEdit">目標 <b id="targetT" class="num">40</b><span id="targetU"> t</span></button>
+    </div>
+    <div class="target-edit" id="targetEdit" hidden>
+      <label for="targetInput">目標の重さ（t）　0 にすると目標なし</label>
+      <input id="targetInput" type="text" inputmode="decimal" autocomplete="off" value="40">
+      <button type="button" id="targetOk" class="btn-sub">決定</button>
+      <span id="targetErr" class="err" hidden></span>
+    </div>
+    <div class="sum-row">
+      <div class="sum"><span class="lbl">合計</span><span id="sumKg" class="big num">0</span><span class="unit">kg</span></div>
+      <div id="rest" class="rest num" aria-live="polite">あと 40,000 kg</div>
+    </div>
+    <div class="bar" id="bar" aria-hidden="true"><div id="barFill" class="bar-fill"></div></div>
+  </div></div>
+</header>
+
+<main id="entry" class="gut"><div class="wrap">
+  <p class="lead">材質と径を選んで、ほしい長さの本数を入れてください。終わったら、下の「画像にする」を押します。</p>
+  <div class="pick">
+    <label for="matSel">材質
+      <select id="matSel"></select>
+    </label>
+    <label for="diaSel">径
+      <select id="diaSel"></select>
+    </label>
+  </div>
+  <p class="hint" id="diaHint" hidden></p>
+  <div class="tools">
+    <span class="tools-lbl">＋ − で動く本数</span>
+    <div class="mini" role="group" aria-label="＋ − で動く本数">
+      <button type="button" id="step10" aria-pressed="false">10本</button>
+      <button type="button" id="step100" aria-pressed="true">100本</button>
+    </div>
+  </div>
+  <div class="rows-head"><b id="rowsTitle" class="num">D10（SD295）</b><span id="rowsSub" class="num">0 本　0 kg</span></div>
+  <div class="rows" id="rows"></div>
+  <button type="button" class="link" id="moreBtn">8.5m〜12.0m も出す</button>
+  <!-- 「入れた材料」は行の下に置く: 上に置くと、最初の1本を入れた時に行が下へずれて、次のタップが別の行に当たる -->
+  <div class="have" id="have" hidden>
+    <div class="have-lbl">入れた材料（押すと、その材料を開きます）</div>
+    <div class="have-list" id="haveList"></div>
+  </div>
+  <section class="who" aria-label="名前とメモ">
+    <label for="nameInput">名前（入れなくてもよい）</label>
+    <input id="nameInput" type="text" autocomplete="off" maxlength="20">
+    <label for="memoInput">メモ（入れなくてもよい）</label>
+    <textarea id="memoInput" rows="2" maxlength="80"></textarea>
+  </section>
+  <div>
+    <button type="button" class="link danger" id="clearBtn">全部消す</button>
+    <div id="clearAsk" class="ask" hidden>
+      <span>入れた本数を全部消します。</span>
+      <button type="button" id="clearYes" class="btn-sub danger">消す</button>
+      <button type="button" id="clearNo" class="btn-sub">やめる</button>
+    </div>
+  </div>
+  <p class="made" style="margin:0;font-size:12px;color:var(--muted);text-align:center">作成：株式会社山村組</p>
+</div></main>
+
+<div class="act" id="act"><div class="gut"><div class="act-in">
+  <button type="button" id="makeBtn" class="btn-main">画像にする</button>
+</div></div></div>
+
+<section id="result" class="gut" hidden><div class="wrap">
+  <div class="res-head">
+    <h2>できた画像</h2>
+    <button type="button" id="backBtn" class="btn-sub">入力に戻る</button>
+  </div>
+  <p class="lead" id="saveLead">画像を長押しして「写真に保存」を選ぶと、iPhoneの写真に入ります。保存できない時は、この画面をスクリーンショットしてください。</p>
+  <button type="button" id="saveBtn" class="btn-main" hidden>保存する</button>
+  <a id="dlLink" class="btn-sub" hidden>画像をダウンロード</a>
+  <p id="saveMsg" class="msg" aria-live="polite"></p>
+  <div class="imgbox"><img id="outImg" alt="仮のカットリストの画像"></div>
+</div></section>
+
+<script>
+(function () {
+  'use strict';
+  // 材質と径の一覧。足す時はここに1行足す(順番＝選ぶ時の並び)。dias＝その材質でよく使う径(径の選択で上に出る。ほかの径も選べる)。
+  var MATS = [
+    { id: 'SD295', label: 'SD295', group: '異形鉄筋', dias: ['D10', 'D13', 'D16'] },
+    { id: 'SD345', label: 'SD345', group: '異形鉄筋', dias: ['D19', 'D22', 'D25'] },
+    { id: 'SD390', label: 'SD390', group: '異形鉄筋', dias: ['D29', 'D32', 'D35', 'D38'] },
+    { id: 'SD490', label: 'SD490', group: '異形鉄筋', dias: ['D35', 'D38', 'D41'] },
+    { id: 'N345', label: 'ネジ SD345', group: 'ネジ鉄筋（東京鐵鋼）', dias: ['D19', 'D22', 'D25'] },
+    { id: 'N390', label: 'ネジ SD390', group: 'ネジ鉄筋（東京鐵鋼）', dias: ['D29', 'D32', 'D35'] },
+    { id: 'N490', label: 'ネジ SD490', group: 'ネジ鉄筋（東京鐵鋼）', dias: ['D35', 'D38', 'D41'] },
+    { id: 'N590', label: 'ネジ SD590', group: 'ネジ鉄筋（東京鐵鋼）', dias: ['D41'] },
+    { id: 'K295', label: '共英ネジ SD295', group: 'ネジ鉄筋（共英製鋼）', dias: ['D16'] },
+    { id: 'K345', label: '共英ネジ SD345', group: 'ネジ鉄筋（共英製鋼）', dias: ['D19', 'D22', 'D25'] },
+    { id: 'K390', label: '共英ネジ SD390', group: 'ネジ鉄筋（共英製鋼）', dias: ['D29', 'D32', 'D35'] }
+  ];
+  var DIAS = ['D10', 'D13', 'D16', 'D19', 'D22', 'D25', 'D29', 'D32', 'D35', 'D38', 'D41'];
+  var UNIT_G = { D10: 560, D13: 995, D16: 1560, D19: 2250, D22: 3040, D25: 3980, D29: 5040, D32: 6230, D35: 7510, D38: 8950, D41: 10500 };  // 1mあたりの重さ(g)
+  var THIN = { D10: 1, D13: 1, D16: 1 };                     // 細い径は 8.5m から先をたたんでおく
+  var LENS = [];                                             // 長さ×10 (3.5m〜12.0m)
+  for (var L = 35; L <= 120; L += 5) LENS.push(L);
+  var FIRST_HIDDEN = 85;
+  var MAX_KINDS = 15;                                        // 1枚の画像に入れる材料の種類
+  var KEY = 'kari-cutlist-v2', OLD_KEY = 'kari-cutlist-v1';
+  var state = { target: 40000, step: 100, mat: 'SD295', dia: 'D10', more: false, name: '', memo: '', q: {} };
+  var dl = null, lastBlob = null, lastName = '', saveMode = '';
+  var inFrame = (function () { try { return window.self !== window.top; } catch (e) { return true; } })();   // ほかのページの枠の中で開かれているか
+
+  function $(id) { return document.getElementById(id); }
+  function fmt(n) { return Number(n).toLocaleString('ja-JP'); }
+  function matOf(id) { for (var i = 0; i < MATS.length; i++) if (MATS[i].id === id) return MATS[i]; return null; }
+  function key(mat, dia) { return mat + '|' + dia; }
+  function label(mat, dia) { return dia + '（' + matOf(mat).label + '）'; }
+
+  // 1本の重さ(0.01kg単位の整数): 1mの重さ×長さ を「上から3けた」に丸める(ちょうど半分は偶数の側)。
+  function barCenti(dia, len10) {
+    var v = UNIT_G[dia] * (len10 / 5);                       // 0.5g 単位の整数
+    var step = v >= 200000 ? 2000 : (v >= 20000 ? 200 : 20); // 100kg以上は1kg、10kg以上は0.1kg、未満は0.01kg
+    var q = Math.floor(v / step), r = v - q * step;
+    if (2 * r > step || (2 * r === step && q % 2 === 1)) q += 1;
+    return q * (step / 20);
+  }
+  function barText(c) { return c >= 10000 ? String(c / 100) : (c >= 1000 ? (c / 100).toFixed(1) : (c / 100).toFixed(2)); }
+  // マスの重さ(kg): 入出庫之助と同じ計算。1本の重さ(小数)に本数を掛け、近い方の整数にする。ちょうど 0.5 の時は偶数の側。
+  // 掛け算はパソコンのふつうの小数で行う(25本×4.98kg は 124.50000000000001 になり 125kg ＝実物の数量明細と同じ)。
+  function cellKg(n, c) {
+    var p = n * (c / 100), f = Math.floor(p), r = p - f;
+    if (r > 0.5) return f + 1;
+    if (r < 0.5) return f;
+    return f % 2 === 0 ? f : f + 1;
+  }
+  function qty(mat, dia, len10) { var o = state.q[key(mat, dia)]; var v = o && o[len10]; return v > 0 ? v : 0; }
+
+  // 入れた材料を 径→材質 の順に並べた一覧と合計
+  function totals() {
+    var t = { kg: 0, bars: 0, list: [] };
+    DIAS.forEach(function (d) {
+      MATS.forEach(function (m) {
+        var o = state.q[key(m.id, d)]; if (!o) return;
+        var it = { mat: m.id, dia: d, bars: 0, kg: 0, rows: [] };
+        LENS.forEach(function (len10) {
+          var n = qty(m.id, d, len10); if (!n) return;
+          var kg = cellKg(n, barCenti(d, len10));
+          it.rows.push({ len10: len10, n: n, kg: kg }); it.bars += n; it.kg += kg;
+        });
+        if (it.bars) { t.list.push(it); t.kg += it.kg; t.bars += it.bars; }
+      });
+    });
+    return t;
+  }
+  function restInfo(total) {
+    if (!state.target) return { text: '', cls: '' };
+    var diff = state.target - total;
+    if (diff > 0) return { text: 'あと ' + fmt(diff) + ' kg', cls: '' };
+    if (diff === 0) return { text: '目標ちょうど', cls: 'ok' };
+    return { text: fmt(-diff) + ' kg オーバー', cls: 'over' };
+  }
+
+  function applyState(s) {
+    if (!s || typeof s !== 'object') return;
+    if (s.target === 0) state.target = 0;
+    else if (s.target > 0 && s.target <= 999000) state.target = Math.round(s.target);
+    if (s.step === 10 || s.step === 100) state.step = s.step;
+    if (matOf(s.mat)) state.mat = s.mat;
+    if (DIAS.indexOf(s.dia) >= 0) state.dia = s.dia;
+    state.more = !!s.more;
+    if (typeof s.name === 'string') state.name = s.name.slice(0, 20);
+    if (typeof s.memo === 'string') state.memo = s.memo.slice(0, 80);
+    if (s.q && typeof s.q === 'object') {
+      state.q = {};
+      MATS.forEach(function (m) {
+        DIAS.forEach(function (d) {
+          var src = s.q[key(m.id, d)]; if (!src) return;
+          var o = {};
+          LENS.forEach(function (len10) { var n = Number(src[len10]); if (n > 0 && n <= 99999) o[len10] = Math.floor(n); });
+          if (Object.keys(o).length) state.q[key(m.id, d)] = o;
+        });
+      });
+    }
+  }
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (s) { applyState(s); return; }
+      var old = JSON.parse(localStorage.getItem(OLD_KEY) || 'null');   // 前の版(径だけ)で入れた分を引き継ぐ
+      if (old && old.q) {
+        var q = {};
+        ['D10', 'D13', 'D16'].forEach(function (d) { if (old.q[d]) q[key('SD295', d)] = old.q[d]; });
+        applyState({ target: old.target, step: old.step, name: old.name, memo: old.memo, q: q });
+      }
+    } catch (e) { /* 保存が使えなくても動く */ }
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* 無くても動く */ } }
+
+  // 径の選択肢: 今の材質でよく使う径を上に、ほかの径を下に並べる
+  function fillDias() {
+    var ds = $('diaSel'), m = matOf(state.mat), g1 = document.createElement('optgroup'), g2 = document.createElement('optgroup');
+    ds.textContent = '';
+    g1.label = 'よく使う径'; g2.label = 'ほかの径';
+    DIAS.forEach(function (d) {
+      var o = document.createElement('option'); o.value = d; o.textContent = d;
+      (m.dias.indexOf(d) >= 0 ? g1 : g2).appendChild(o);
+    });
+    ds.appendChild(g1);
+    if (g2.children.length) ds.appendChild(g2);
+    ds.value = state.dia;
+  }
+  function buildPickers() {
+    var ms = $('matSel'), ds = $('diaSel'), grp = null, og = null;
+    ms.textContent = '';
+    MATS.forEach(function (m) {
+      if (m.group !== grp) { og = document.createElement('optgroup'); og.label = m.group; ms.appendChild(og); grp = m.group; }
+      var o = document.createElement('option'); o.value = m.id; o.textContent = m.label; og.appendChild(o);
+    });
+    ms.value = state.mat; fillDias();
+    ms.addEventListener('change', function () {
+      var m = matOf(ms.value); if (!m) return;
+      state.mat = m.id;
+      // 径は黙って替えない(同じ径で材質だけ替えたい人が、気づかずに別の径へ本数を入れてしまう)。ふつう使わない組み合わせの時は、下の注意書きで知らせる
+      save(); fillDias(); renderRows(); update();
+    });
+    ds.addEventListener('change', function () { if (DIAS.indexOf(ds.value) >= 0) { state.dia = ds.value; save(); renderRows(); update(); } });
+  }
+  function openKind(mat, dia) {
+    state.mat = mat; state.dia = dia; save();
+    $('matSel').value = mat; fillDias();
+    renderRows(); update();
+    window.scrollTo(0, 0);
+  }
+
+  function renderRows() {
+    var box = $('rows'), m = state.mat, d = state.dia, folded = !!THIN[d] && !state.more;
+    box.textContent = '';
+    LENS.forEach(function (len10) {
+      if (folded && len10 >= FIRST_HIDDEN && !qty(m, d, len10)) return;
+      var c = barCenti(d, len10), id = m + '-' + d + '-' + len10, lenText = (len10 / 10).toFixed(1) + 'm';
+      var row = document.createElement('div'); row.className = 'row'; row.id = 'row-' + id;
+      var len = document.createElement('div'); len.className = 'len';
+      var a = document.createElement('span'); a.className = 'm num'; a.textContent = lenText;
+      var w = document.createElement('span'); w.className = 'w num'; w.textContent = '1本 ' + barText(c) + 'kg';
+      len.appendChild(a); len.appendChild(w);
+      var minus = document.createElement('button'); minus.type = 'button'; minus.className = 'pm'; minus.textContent = '−';
+      minus.setAttribute('aria-label', lenText + ' を減らす');
+      var inp = document.createElement('input'); inp.className = 'qty num'; inp.id = 'q-' + id;
+      inp.type = 'text'; inp.inputMode = 'numeric'; inp.autocomplete = 'off'; inp.placeholder = '0';
+      inp.setAttribute('aria-label', label(m, d) + ' ' + lenText + ' の本数');
+      inp.value = qty(m, d, len10) ? String(qty(m, d, len10)) : '';
+      var plus = document.createElement('button'); plus.type = 'button'; plus.className = 'pm'; plus.textContent = '＋';
+      plus.setAttribute('aria-label', lenText + ' を増やす');
+      var kg = document.createElement('div'); kg.className = 'kg num'; kg.id = 'kg-' + id;
+      function set(n) {
+        n = Math.max(0, Math.min(99999, Math.floor(n) || 0));
+        var k = key(m, d), o = state.q[k] || (state.q[k] = {});
+        if (n) o[len10] = n; else delete o[len10];
+        if (!Object.keys(o).length) delete state.q[k];
+        save(); update();
+      }
+      function show() { inp.value = qty(m, d, len10) ? String(qty(m, d, len10)) : ''; }
+      function norm() {
+        var t = inp.value.replace(/[０-９]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); }).replace(/[^0-9]/g, '').slice(0, 5);
+        if (t !== inp.value) inp.value = t;
+        set(Number(t));
+      }
+      // 日本語入力の変換中は欄を書き換えない(変換中に書き換えると数字が二重に入る)。確定した時にまとめて直す
+      inp.addEventListener('input', function (ev) { if (ev && ev.isComposing) return; norm(); });
+      inp.addEventListener('compositionend', norm);
+      inp.addEventListener('focus', function () { try { inp.select(); } catch (e) { /* 選べなくてもよい */ } });
+      minus.addEventListener('click', function () { set(qty(m, d, len10) - state.step); show(); });
+      plus.addEventListener('click', function () { set(qty(m, d, len10) + state.step); show(); });
+      row.appendChild(len); row.appendChild(minus); row.appendChild(inp); row.appendChild(plus); row.appendChild(kg);
+      box.appendChild(row);
+    });
+    var mb = $('moreBtn');
+    mb.hidden = !THIN[d];
+    mb.textContent = state.more ? '8.5m〜12.0m をしまう' : '8.5m〜12.0m も出す';
+    $('rowsTitle').textContent = label(m, d);
+  }
+
+  function renderHave(t) {
+    var box = $('haveList'); box.textContent = '';
+    t.list.forEach(function (it) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'num';
+      if (it.mat === state.mat && it.dia === state.dia) b.setAttribute('aria-current', 'true');
+      var s = document.createElement('b'); s.textContent = label(it.mat, it.dia);
+      b.appendChild(s); b.appendChild(document.createTextNode('　' + fmt(it.kg) + ' kg'));
+      b.addEventListener('click', function () { openKind(it.mat, it.dia); });
+      box.appendChild(b);
+    });
+    $('have').hidden = t.list.length === 0;
+  }
+
+  function update() {
+    var t = totals(), r = restInfo(t.kg), m = state.mat, d = state.dia;
+    $('sumKg').textContent = fmt(t.kg);
+    var rest = $('rest'); rest.textContent = r.text; rest.className = 'rest num' + (r.cls ? ' ' + r.cls : '');
+    var fill = $('barFill');
+    fill.style.width = Math.max(0, Math.min(100, state.target ? t.kg / state.target * 100 : 0)) + '%';
+    fill.className = 'bar-fill' + (r.cls ? ' ' + r.cls : '');
+    $('bar').hidden = !state.target;
+    $('targetT').textContent = state.target ? String(state.target / 1000) : 'なし';
+    $('targetU').hidden = !state.target;
+    var cur = { bars: 0, kg: 0 };
+    LENS.forEach(function (len10) {
+      var n = qty(m, d, len10), kg = n ? cellKg(n, barCenti(d, len10)) : 0;
+      cur.bars += n; cur.kg += kg;
+      var row = $('row-' + m + '-' + d + '-' + len10); if (!row) return;
+      row.classList.toggle('on', n > 0);
+      $('kg-' + m + '-' + d + '-' + len10).textContent = n ? fmt(kg) + ' kg' : '−';
+    });
+    $('rowsSub').textContent = fmt(cur.bars) + ' 本　' + fmt(cur.kg) + ' kg';
+    var mm = matOf(m), hint = $('diaHint');
+    if (mm.dias.indexOf(d) < 0) {
+      hint.textContent = '「' + mm.label + '」でよく使う径は ' + mm.dias.join('・') + ' です。今は ' + d + ' を選んでいます。';
+      hint.hidden = false;
+    } else { hint.hidden = true; }
+    renderHave(t);
+    $('step10').setAttribute('aria-pressed', state.step === 10 ? 'true' : 'false');
+    $('step100').setAttribute('aria-pressed', state.step === 100 ? 'true' : 'false');
+    $('makeBtn').disabled = t.bars === 0;
+  }
+
+  function stamp(d) {
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return { text: d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()),
+             file: '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) };
+  }
+
+  // 画像(白い紙に黒い字・たて長)。材料ごとに 長さ・本数・重量 を並べる。スマホの幅で読める大きさ。
+  function drawSheet(t, st) {
+    var W = 1080, PAD = 48, ROW = 60, HEAD = 72, GAP = 26, TOP = 330;
+    var F = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif';
+    var c = document.createElement('canvas'), x = c.getContext('2d');
+    var memoLines = [], memoText = state.memo.replace(/\s+/g, ' ').trim(), nameText = state.name.replace(/\s+/g, ' ').trim();
+    if (memoText) {
+      x.font = '500 34px ' + F;
+      var memo = 'メモ　' + memoText, buf = '';
+      for (var k = 0; k < memo.length; k++) {
+        if (x.measureText(buf + memo[k]).width > W - PAD * 2) { memoLines.push(buf); buf = ''; }
+        buf += memo[k];
+      }
+      if (buf) memoLines.push(buf);
+    }
+    var H = TOP;
+    t.list.forEach(function (it) { H += HEAD + it.rows.length * ROW + GAP; });
+    H += memoLines.length ? memoLines.length * 48 + 16 : 0;
+    H += 30;
+    var S = Math.min(1, 14000 / H);          // iPhone は大きすぎる画像を作れない(約1,670万画素まで)。とても長い時は全体を縮めて1枚に収める
+    c.width = Math.round(W * S); c.height = Math.round(H * S);
+    x = c.getContext('2d');
+    x.scale(S, S);
+    x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#111111'; x.strokeStyle = '#111111'; x.textBaseline = 'middle';
+    x.font = '700 56px ' + F; x.textAlign = 'center'; x.fillText('仮のカットリスト', W / 2, 70);
+    x.font = '500 32px ' + F; x.textAlign = 'right'; x.fillText('作成　' + st.text, W - PAD, 134);
+    if (nameText) {                           // 名前は左。長い名前は、作成の日時に重ならない幅まで字を小さくする
+      var nm = '名前　' + nameText, fs = 32;
+      x.font = '500 ' + fs + 'px ' + F;
+      while (fs > 18 && x.measureText(nm).width > W - PAD * 2 - 450) { fs -= 2; x.font = '500 ' + fs + 'px ' + F; }
+      x.textAlign = 'left'; x.fillText(nm, PAD, 134);
+    }
+    x.lineWidth = 3; x.strokeRect(PAD, 168, W - PAD * 2, 132);
+    x.textAlign = 'left'; x.font = '500 30px ' + F; x.fillText('合計', PAD + 24, 204);
+    x.font = '700 64px ' + F; x.fillText(fmt(t.kg) + ' kg', PAD + 24, 258);
+    if (state.target) {
+      x.textAlign = 'right'; x.font = '500 32px ' + F; x.fillText('目標　' + fmt(state.target) + ' kg', W - PAD - 24, 208);
+      x.font = '700 38px ' + F; x.fillText(restInfo(t.kg).text, W - PAD - 24, 262);
+    }
+    var y = TOP;
+    t.list.forEach(function (it) {
+      var bh = HEAD + it.rows.length * ROW;
+      x.fillStyle = '#E6EAEE'; x.fillRect(PAD, y, W - PAD * 2, HEAD);
+      x.fillStyle = '#111111';
+      x.textAlign = 'left'; x.font = '700 40px ' + F; x.fillText(label(it.mat, it.dia), PAD + 20, y + HEAD / 2);
+      x.textAlign = 'right'; x.font = '600 34px ' + F; x.fillText(fmt(it.bars) + ' 本　' + fmt(it.kg) + ' kg', W - PAD - 20, y + HEAD / 2);
+      var ry = y + HEAD;
+      it.rows.forEach(function (rw) {
+        x.strokeStyle = '#9AA4AE'; x.lineWidth = 1; x.beginPath(); x.moveTo(PAD, ry); x.lineTo(W - PAD, ry); x.stroke();
+        x.font = '500 38px ' + F;
+        x.textAlign = 'left'; x.fillText((rw.len10 / 10).toFixed(1) + ' m', PAD + 20, ry + ROW / 2);
+        x.textAlign = 'right'; x.fillText(fmt(rw.n) + ' 本', 660, ry + ROW / 2);
+        x.fillText(fmt(rw.kg) + ' kg', W - PAD - 20, ry + ROW / 2);
+        ry += ROW;
+      });
+      x.strokeStyle = '#111111'; x.lineWidth = 2; x.strokeRect(PAD, y, W - PAD * 2, bh);
+      y += bh + GAP;
+    });
+    if (memoLines.length) {
+      x.font = '500 34px ' + F; x.textAlign = 'left';
+      memoLines.forEach(function (ln, i) { x.fillText(ln, PAD, y + 20 + i * 48); });
+    }
+    return c;
+  }
+
+  // 画像の渡し方を、開いている場所でできる物に合わせる:
+  //   share  = iPhone などの「共有」(写真に保存・LINE で送る)。ふつうのページとして開いている時に使える
+  //   claude = Claude の中で開いている持ち主向けの保存
+  //   どちらも無い時は、長押し保存(とパソコン向けのダウンロード)
+  function shareFile() { try { return new File([lastBlob], lastName, { type: 'image/png' }); } catch (e) { return null; } }
+  function canShareFile() {
+    try {
+      if (!lastBlob || !navigator.share || !navigator.canShare) return false;
+      var f = shareFile();
+      return !!f && navigator.canShare({ files: [f] });
+    } catch (e) { return false; }
+  }
+  function setupSave() {
+    var btn = $('saveBtn'), a = $('dlLink'), lead = $('saveLead');
+    saveMode = canShareFile() ? 'share' : (dl && lastBlob ? 'claude' : '');
+    btn.hidden = !saveMode;
+    btn.textContent = saveMode === 'share' ? '保存する・送る' : '保存する';
+    lead.textContent = saveMode === 'share'
+      ? '下の「保存する・送る」を押すと、写真への保存や LINE での送信ができます。画像の長押しでも保存できます。'
+      : '画像を長押しして「写真に保存」を選ぶと、iPhoneの写真に入ります。保存できない時は、この画面をスクリーンショットしてください。';
+    if (!saveMode && !inFrame && $('outImg').src) { a.href = $('outImg').src; a.setAttribute('download', lastName); a.hidden = false; } else { a.hidden = true; }
+  }
+
+  function makeImage() {
+    var t = totals(); if (!t.bars) return;
+    if (t.list.length > MAX_KINDS) {
+      $('makeBtn').textContent = '材料は ' + MAX_KINDS + ' 種類まで（今 ' + t.list.length + ' 種類）';
+      setTimeout(function () { $('makeBtn').textContent = '画像にする'; }, 4000);
+      return;
+    }
+    var st = stamp(new Date()), c = null, url = '';
+    try { c = drawSheet(t, st); url = c.toDataURL('image/png'); } catch (e) { url = ''; }
+    if (!url || url.length < 1000) {          // 画像を作れなかった時は、黙って空の画面にしない
+      $('makeBtn').textContent = '画像を作れませんでした。材料を減らしてもう一度';
+      setTimeout(function () { $('makeBtn').textContent = '画像にする'; }, 5000);
+      return;
+    }
+    $('outImg').src = url;
+    lastName = 'kari-cutlist_' + st.file + '.png';
+    lastBlob = null;
+    setupSave();
+    if (c.toBlob) c.toBlob(function (b) { lastBlob = b; setupSave(); }, 'image/png');
+    $('saveMsg').textContent = '';
+    $('targetEdit').hidden = true; $('targetBtn').setAttribute('aria-expanded', 'false');
+    $('targetBtn').disabled = true;            // 画像を出している間は目標を変えさせない(画像の中の目標と食い違う)
+    $('entry').hidden = true; $('act').hidden = true; $('result').hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function boot() {
+    load();
+    try { if (window.claude && window.claude.hot && window.claude.hot.data && window.claude.hot.data.state) applyState(window.claude.hot.data.state); } catch (e) { /* 無くてもよい */ }
+    buildPickers(); renderRows();
+    $('nameInput').value = state.name; $('memoInput').value = state.memo;
+    update();
+
+    $('step10').addEventListener('click', function () { state.step = 10; save(); update(); });
+    $('step100').addEventListener('click', function () { state.step = 100; save(); update(); });
+    $('moreBtn').addEventListener('click', function () { state.more = !state.more; save(); renderRows(); update(); });
+    $('nameInput').addEventListener('input', function () { state.name = $('nameInput').value.slice(0, 20); save(); });
+    $('memoInput').addEventListener('input', function () { state.memo = $('memoInput').value.slice(0, 80); save(); });
+    $('targetBtn').addEventListener('click', function () {
+      var ed = $('targetEdit'); ed.hidden = !ed.hidden;
+      $('targetBtn').setAttribute('aria-expanded', ed.hidden ? 'false' : 'true');
+      $('targetErr').hidden = true;
+      if (!ed.hidden) { $('targetInput').value = String(state.target / 1000); try { $('targetInput').focus(); } catch (e) { /* 無くてもよい */ } }
+    });
+    $('targetOk').addEventListener('click', function () {
+      var raw = String($('targetInput').value).trim().replace(/[０-９．]/g, function (ch) { return ch === '．' ? '.' : String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); });
+      var err = $('targetErr');
+      // 数字と小数点だけを受け付ける(「40,5」を 405 と読んだり、「-5」を 5 と読んだりしない)。だめな時は欄を開いたまま知らせる
+      if (!/^\d{1,3}(\.\d{1,3})?$/.test(raw)) { err.textContent = '0〜999 の数字で入れてください（例 40、12.5）。'; err.hidden = false; return; }
+      err.hidden = true;
+      state.target = Math.round(Number(raw) * 1000); save(); update();
+      $('targetEdit').hidden = true; $('targetBtn').setAttribute('aria-expanded', 'false');
+    });
+    $('clearBtn').addEventListener('click', function () { $('clearAsk').hidden = false; });
+    $('clearNo').addEventListener('click', function () { $('clearAsk').hidden = true; });
+    $('clearYes').addEventListener('click', function () { state.q = {}; save(); renderRows(); update(); $('clearAsk').hidden = true; });
+    $('makeBtn').addEventListener('click', makeImage);
+    $('backBtn').addEventListener('click', function () {
+      $('result').hidden = true; $('entry').hidden = false; $('act').hidden = false; $('targetBtn').disabled = false; window.scrollTo(0, 0);
+    });
+    $('saveBtn').addEventListener('click', function () {
+      var msg = $('saveMsg'), fail = 'ここからは保存できませんでした。画像を長押しして保存してください。';
+      if (!lastBlob) { msg.textContent = '画像を長押しして保存してください。'; return; }
+      if (saveMode === 'share') {
+        var f = shareFile();
+        if (!f) { msg.textContent = fail; return; }
+        msg.textContent = '';
+        navigator.share({ files: [f] }).catch(function (e) { if (!e || e.name !== 'AbortError') msg.textContent = fail; });   // 途中でやめた時は何も出さない
+        return;
+      }
+      if (saveMode === 'claude' && dl) {
+        dl.save({ filename: lastName, data: lastBlob }).then(function () {
+          msg.textContent = '保存しました。';
+        }).catch(function (e) {
+          msg.textContent = (e && e.code === 'declined') ? '保存をやめました。' : fail;
+        });
+        return;
+      }
+      msg.textContent = '画像を長押しして保存してください。';
+    });
+    // Claude の中で持ち主が開いている時だけ使える保存(リンクで開いた人には出ない)
+    try {
+      if (window.claude && typeof window.claude.use === 'function') {
+        window.claude.use('downloads').then(function (ns) { if (ns) { dl = ns; if (!$('result').hidden) setupSave(); } }).catch(function () { /* 無くてもよい */ });
+      }
+    } catch (e) { /* 無くてもよい */ }
+    try {
+      if (window.claude && window.claude.hot) {
+        if (typeof window.claude.hot.snapshot === 'function') window.claude.hot.snapshot(function () { return { state: state }; });
+        if (typeof window.claude.hot.ready === 'function') window.claude.hot.ready(function (d) {
+          if (d && d.state) { applyState(d.state); $('matSel').value = state.mat; fillDias(); renderRows(); $('nameInput').value = state.name; $('memoInput').value = state.memo; update(); }
+        });
+      }
+    } catch (e) { /* 無くてもよい */ }
+  }
+
+  window.__kariCutlist = { barCenti: barCenti, cellKg: cellKg };   // 検算用
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
+</body>
+</html>
