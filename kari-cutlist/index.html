@@ -7,11 +7,11 @@
 <meta name="format-detection" content="telephone=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="仮のカットリスト">
+<meta name="apple-mobile-web-app-title" content="カットリスト作成">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1B2229" media="(prefers-color-scheme: dark)">
 <style>:root{color-scheme:light;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>仮のカットリスト</title>
+<title>カットリスト作成</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
 <style>
@@ -137,7 +137,7 @@ a.btn-sub{display:inline-flex;align-items:center;justify-content:center;text-dec
 <header class="top">
   <div class="gut"><div class="top-in">
     <div class="top-row">
-      <h1 class="ttl">仮のカットリスト</h1>
+      <h1 class="ttl">カットリスト作成</h1>
       <button type="button" class="chip" id="targetBtn" aria-expanded="false" aria-controls="targetEdit">目標 <b id="targetT" class="num">40</b><span id="targetU"> t</span></button>
     </div>
     <div class="target-edit" id="targetEdit" hidden>
@@ -210,7 +210,7 @@ a.btn-sub{display:inline-flex;align-items:center;justify-content:center;text-dec
   <button type="button" id="saveBtn" class="btn-main" hidden>保存する</button>
   <a id="dlLink" class="btn-sub" hidden>画像をダウンロード</a>
   <p id="saveMsg" class="msg" aria-live="polite"></p>
-  <div class="imgbox"><img id="outImg" alt="仮のカットリストの画像"></div>
+  <div class="imgbox"><img id="outImg" alt="カットリストの画像"></div>
 </div></section>
 
 <script>
@@ -486,7 +486,7 @@ a.btn-sub{display:inline-flex;align-items:center;justify-content:center;text-dec
     x.scale(S, S);
     x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, W, H);
     x.fillStyle = '#111111'; x.strokeStyle = '#111111'; x.textBaseline = 'middle';
-    x.font = '700 56px ' + F; x.textAlign = 'center'; x.fillText('仮のカットリスト', W / 2, 70);
+    x.font = '700 56px ' + F; x.textAlign = 'center'; x.fillText('カットリスト', W / 2, 70);
     x.font = '500 32px ' + F; x.textAlign = 'right'; x.fillText('作成　' + st.text, W - PAD, 134);
     if (nameText) {                           // 名前は左。長い名前は、作成の日時に重ならない幅まで字を小さくする
       var nm = '名前　' + nameText, fs = 32;
@@ -565,7 +565,7 @@ a.btn-sub{display:inline-flex;align-items:center;justify-content:center;text-dec
       return;
     }
     $('outImg').src = url;
-    lastName = 'kari-cutlist_' + st.file + '.png';
+    lastName = 'cutlist_' + st.file + '.png';
     lastBlob = null;
     setupSave();
     if (c.toBlob) c.toBlob(function (b) { lastBlob = b; setupSave(); }, 'image/png');
